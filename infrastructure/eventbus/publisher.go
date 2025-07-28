@@ -12,11 +12,17 @@ type EventPublisher interface {
 	Publish(ctx context.Context, events []events.DomainEvent) error
 }
 
-// InMemoryEventPublisher implementación simple que loggea los eventos
-type InMemoryEventPublisher struct{}
+// InMemoryEventPublisher implementación simple que loggea los eventos y actualiza proyecciones
+type InMemoryEventPublisher struct {
+	projectionSubscriber *ProjectionSubscriber
+}
 
 func NewInMemoryEventPublisher() *InMemoryEventPublisher {
 	return &InMemoryEventPublisher{}
+}
+
+func (p *InMemoryEventPublisher) SetProjectionSubscriber(subscriber *ProjectionSubscriber) {
+	p.projectionSubscriber = subscriber
 }
 
 func (p *InMemoryEventPublisher) Publish(ctx context.Context, domainEvents []events.DomainEvent) error {
@@ -36,6 +42,15 @@ func (p *InMemoryEventPublisher) Publish(ctx context.Context, domainEvents []eve
 			return fmt.Errorf("failed to handle event %s: %w", event.EventType(), err)
 		}
 	}
+
+	// Actualizar proyecciones si hay un suscriptor configurado
+	if p.projectionSubscriber != nil {
+		if err := p.projectionSubscriber.Handle(ctx, domainEvents); err != nil {
+			fmt.Printf("⚠️  Error updating projections: %v\n", err)
+			// No devolvemos el error para no fallar el comando principal
+		}
+	}
+
 	return nil
 }
 

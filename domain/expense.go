@@ -45,3 +45,18 @@ func (e *Expense) UncommittedEvents() []events.DomainEvent {
 func (e *Expense) ClearUncommittedEvents() {
 	e.uncommitted = nil
 }
+
+func (e *Expense) Update(categoryID string, amount float64, description *string, date time.Time) {
+	e.CategoryID = categoryID
+	e.Amount = amount
+	e.Description = description
+	e.Date = date
+
+	event := events.NewExpenseUpdated(e.ID, categoryID, amount, description, date)
+	e.uncommitted = append(e.uncommitted, event)
+}
+
+func (e *Expense) Delete() {
+	event := events.NewExpenseDeleted(e.ID)
+	e.uncommitted = append(e.uncommitted, event)
+}
