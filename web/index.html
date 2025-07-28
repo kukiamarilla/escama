@@ -26,7 +26,7 @@
         }
 
         header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #E3B65F 0%, #ff9800 100%);;
             color: white;
             padding: 2rem 0;
             margin-bottom: 2rem;
@@ -80,11 +80,11 @@
 
         input[type="date"]:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: #ff9800;
         }
 
         button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #E3B65F 0%, #ff9800 100%);;
             color: white;
             padding: 0.75rem 1.5rem;
             border: none;
@@ -150,11 +150,6 @@
             margin-bottom: 1.5rem;
             padding-bottom: 1rem;
             border-bottom: 2px solid #f1f5f9;
-        }
-
-        .movements-list {
-            max-height: 500px;
-            overflow-y: auto;
         }
 
         .movement-item {
@@ -263,6 +258,81 @@
             max-height: 100%;
         }
 
+        .pagination-section {
+            background: white;
+            padding: 1rem 1.5rem;
+            margin-top: 1rem;
+            border-radius: 0 0 10px 10px;
+            border-top: 1px solid #f1f5f9;
+        }
+
+        .pagination-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .pagination-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .pagination-controls button {
+            padding: 0.5rem 1rem;
+            border: 1px solid #e1e5e9;
+            background: white;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .pagination-controls button:hover:not(:disabled) {
+            background: #f8fafc;
+            border-color: #ff9800;
+        }
+
+        .pagination-controls button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .page-numbers {
+            display: flex;
+            gap: 0.25rem;
+        }
+
+        .page-number {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #e1e5e9;
+            background: white;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .page-number:hover {
+            background: #f8fafc;
+            border-color: #ff9800;
+        }
+
+        .page-number.active {
+            background: linear-gradient(135deg, #E3B65F 0%, #ff9800 100%);;
+            color: white;
+            border-color: #ff9800;
+        }
+
         @media (max-width: 768px) {
             .date-controls {
                 flex-direction: column;
@@ -278,14 +348,23 @@
             .movement-amount {
                 align-self: flex-end;
             }
+
+            .pagination-info {
+                flex-direction: column;
+                gap: 0.5rem;
+                text-align: center;
+            }
+
+            .pagination-controls {
+                flex-wrap: wrap;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>💰 Escama</h1>
-            <p class="subtitle">Dashboard de Finanzas Personales</p>
+            <h1>🐟 Escama</h1>
         </header>
 
         <div class="controls">
@@ -344,10 +423,27 @@
             <div id="movementsList" class="movements-list">
                 <div class="loading">Cargando movimientos...</div>
             </div>
+            <div class="pagination-section" id="paginationSection" style="display: none;">
+                <div class="pagination-info">
+                    <span id="paginationInfo">Página 1 de 1</span>
+                    <span id="totalMovements">Total: 0 movimientos</span>
+                </div>
+                <div class="pagination-controls">
+                    <button id="prevBtn" onclick="previousPage()" disabled>❮ Anterior</button>
+                    <div class="page-numbers" id="pageNumbers"></div>
+                    <button id="nextBtn" onclick="nextPage()" disabled>Siguiente ❯</button>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
+        // Variables globales para paginación
+        let currentPage = 1;
+        let itemsPerPage = 10;
+        let totalPages = 1;
+        let totalMovements = 0;
+
         // Configurar fechas por defecto (mes actual)
         function setCurrentMonth() {
             const now = new Date();
@@ -365,12 +461,15 @@
             const startDate = document.getElementById('startDate').value;
             const endDate = document.getElementById('endDate').value;
             
+            // Reiniciar paginación al cambiar fechas
+            currentPage = 1;
+            
             try {
                 // Cargar balance
                 await loadBalance(startDate, endDate);
                 
-                // Cargar movimientos
-                await loadMovements(startDate, endDate);
+                // Cargar movimientos con paginación
+                await loadMovements(startDate, endDate, currentPage);
                 
                 // Cargar gráfico de gastos por categoría
                 await loadExpensesChart(startDate, endDate);
@@ -415,28 +514,58 @@
             }
         }
 
-        // Cargar movimientos
-        async function loadMovements(startDate, endDate) {
+        // Cargar movimientos con paginación
+        async function loadMovements(startDate, endDate, page = 1) {
             let url = '/api/movements';
+            const params = new URLSearchParams();
+            
             if (startDate && endDate) {
-                url += `?start_date=${startDate}&end_date=${endDate}`;
+                params.append('start_date', startDate);
+                params.append('end_date', endDate);
+            }
+            
+            params.append('page', page.toString());
+            params.append('limit', itemsPerPage.toString());
+            
+            if (params.toString()) {
+                url += `?${params.toString()}`;
             }
             
             const response = await fetch(url);
             if (!response.ok) {
                 throw new Error(`Error del servidor: ${response.status}`);
             }
-            const movements = await response.json();
+            const data = await response.json();
+            
+            // Verificar si es respuesta paginada o lista simple
+            let movements, total, hasNext, hasPrev;
+            if (data.movements) {
+                // Respuesta paginada
+                movements = data.movements;
+                total = data.total;
+                currentPage = data.page;
+                totalPages = Math.ceil(total / itemsPerPage);
+                hasNext = data.has_next;
+                hasPrev = data.has_prev;
+                totalMovements = total;
+            } else {
+                // Respuesta simple (fallback)
+                movements = Array.isArray(data) ? data : [];
+                total = movements.length;
+                totalPages = 1;
+                hasNext = false;
+                hasPrev = false;
+                totalMovements = total;
+            }
             
             const movementsList = document.getElementById('movementsList');
             const movementCount = document.getElementById('movementCount');
+            const paginationSection = document.getElementById('paginationSection');
             
-            // Asegurar que movements sea un array válido
-            const safeMovements = Array.isArray(movements) ? movements : [];
+            // Actualizar contador
+            movementCount.textContent = `${total} movimiento${total !== 1 ? 's' : ''}`;
             
-            movementCount.textContent = `${safeMovements.length} movimiento${safeMovements.length !== 1 ? 's' : ''}`;
-            
-            if (safeMovements.length === 0) {
+            if (movements.length === 0) {
                 movementsList.innerHTML = `
                     <div class="empty-state">
                         <div class="empty-state-icon">📝</div>
@@ -444,10 +573,12 @@
                         <p>No se encontraron movimientos para el período seleccionado.</p>
                     </div>
                 `;
+                paginationSection.style.display = 'none';
                 return;
             }
             
-            movementsList.innerHTML = safeMovements.map(movement => {
+            // Mostrar movimientos
+            movementsList.innerHTML = movements.map(movement => {
                 const date = new Date(movement.date);
                 const formattedDate = date.toLocaleDateString('es-ES', {
                     year: 'numeric',
@@ -476,6 +607,14 @@
                     </div>
                 `;
             }).join('');
+            
+            // Mostrar controles de paginación si hay más de una página
+            if (totalPages > 1) {
+                updatePaginationControls();
+                paginationSection.style.display = 'block';
+            } else {
+                paginationSection.style.display = 'none';
+            }
         }
 
         // Variable global para el gráfico
@@ -602,6 +741,61 @@
                     }
                 }
             });
+        }
+
+        // Funciones de paginación
+        function updatePaginationControls() {
+            const paginationInfo = document.getElementById('paginationInfo');
+            const totalMovementsSpan = document.getElementById('totalMovements');
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            const pageNumbers = document.getElementById('pageNumbers');
+            
+            // Actualizar información
+            paginationInfo.textContent = `Página ${currentPage} de ${totalPages}`;
+            totalMovementsSpan.textContent = `Total: ${totalMovements} movimiento${totalMovements !== 1 ? 's' : ''}`;
+            
+            // Botones anterior/siguiente
+            prevBtn.disabled = currentPage === 1;
+            nextBtn.disabled = currentPage === totalPages;
+            
+            // Generar números de página
+            pageNumbers.innerHTML = '';
+            const maxVisiblePages = 5;
+            let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+            let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+            
+            // Ajustar si estamos cerca del final
+            if (endPage - startPage + 1 < maxVisiblePages) {
+                startPage = Math.max(1, endPage - maxVisiblePages + 1);
+            }
+            
+            for (let i = startPage; i <= endPage; i++) {
+                const pageBtn = document.createElement('div');
+                pageBtn.className = `page-number ${i === currentPage ? 'active' : ''}`;
+                pageBtn.textContent = i;
+                pageBtn.onclick = () => goToPage(i);
+                pageNumbers.appendChild(pageBtn);
+            }
+        }
+        
+        function goToPage(page) {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            currentPage = page;
+            loadMovements(startDate, endDate, page);
+        }
+        
+        function previousPage() {
+            if (currentPage > 1) {
+                goToPage(currentPage - 1);
+            }
+        }
+        
+        function nextPage() {
+            if (currentPage < totalPages) {
+                goToPage(currentPage + 1);
+            }
         }
 
         // Inicializar al cargar la página

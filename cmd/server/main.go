@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"escama/application/queries"
@@ -80,6 +81,42 @@ func (s *Server) getMovements(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Parsear parámetros de paginación
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			query.Offset = (page - 1) * 10 // Asumiendo 10 elementos por página
+		}
+	}
+
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			query.Limit = limit
+			if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+				if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+					query.Offset = (page - 1) * limit
+				}
+			}
+		}
+	}
+
+	// Si se especifican parámetros de paginación, usar el endpoint paginado
+	if query.Limit > 0 || query.Offset > 0 {
+		if query.Limit == 0 {
+			query.Limit = 10 // Default
+		}
+
+		paginatedMovements, err := s.queryHandler.GetPaginatedMovements(ctx, query)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error getting paginated movements: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(paginatedMovements)
+		return
+	}
+
+	// Sin paginación, usar el endpoint original
 	movements, err := s.queryHandler.GetMovements(ctx, query)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error getting movements: %v", err), http.StatusInternalServerError)

@@ -21,6 +21,16 @@ type Movement struct {
 	CreatedAt    time.Time `json:"created_at"`
 }
 
+// PaginatedMovements representa una respuesta paginada de movimientos
+type PaginatedMovements struct {
+	Movements []Movement `json:"movements"`
+	Total     int        `json:"total"`
+	Page      int        `json:"page"`
+	PerPage   int        `json:"per_page"`
+	HasNext   bool       `json:"has_next"`
+	HasPrev   bool       `json:"has_prev"`
+}
+
 // Balance representa el balance de un período
 type Balance struct {
 	TotalIncome  float64 `json:"total_income"`
@@ -33,6 +43,8 @@ type Balance struct {
 type GetMovementsQuery struct {
 	StartDate *time.Time
 	EndDate   *time.Time
+	Limit     int
+	Offset    int
 }
 
 // GetBalanceQuery consulta para obtener balance de un período
@@ -101,6 +113,55 @@ func (h *MovementsQueryHandler) GetMovements(ctx context.Context, query GetMovem
 	}
 
 	return movements, nil
+}
+
+func (h *MovementsQueryHandler) GetPaginatedMovements(ctx context.Context, query GetMovementsQuery) (PaginatedMovements, error) {
+	// Obtener todos los movimientos primero (para calcular el total)
+	allMovements, err := h.GetMovements(ctx, GetMovementsQuery{
+		StartDate: query.StartDate,
+		EndDate:   query.EndDate,
+	})
+	if err != nil {
+		return PaginatedMovements{}, err
+	}
+
+	total := len(allMovements)
+
+	// Aplicar paginación
+	perPage := query.Limit
+	if perPage <= 0 {
+		perPage = 10 // Por defecto 10 elementos por página
+	}
+
+	offset := query.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Calcular página actual
+	page := (offset / perPage) + 1
+
+	// Aplicar offset y limit
+	end := offset + perPage
+	if end > total {
+		end = total
+	}
+
+	var paginatedMovements []Movement
+	if offset < total {
+		paginatedMovements = allMovements[offset:end]
+	} else {
+		paginatedMovements = []Movement{}
+	}
+
+	return PaginatedMovements{
+		Movements: paginatedMovements,
+		Total:     total,
+		Page:      page,
+		PerPage:   perPage,
+		HasNext:   (offset + perPage) < total,
+		HasPrev:   offset > 0,
+	}, nil
 }
 
 func (h *MovementsQueryHandler) GetBalance(ctx context.Context, query GetBalanceQuery) (Balance, error) {
