@@ -467,7 +467,7 @@
                             </div>
                             <div class="movement-details">
                                 <h4>${description}</h4>
-                                <p>${formattedDate} • ${movement.category_id}</p>
+                                <p>${formattedDate} • ${movement.category_name}</p>
                             </div>
                         </div>
                         <div class="movement-amount ${movement.type}">
@@ -548,10 +548,7 @@
             expensesChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: safeExpensesData.map(item => {
-                        const category = item.category_id === 'Sin categoría' ? 'Sin categoría' : item.category_id;
-                        return category;
-                    }),
+                    labels: safeExpensesData.map(item => item.category_name),
                     datasets: [{
                         label: 'Gastos por Categoría',
                         data: data,

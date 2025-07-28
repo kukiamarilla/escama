@@ -11,13 +11,14 @@ import (
 
 // Movement representa un movimiento en el flujo de caja
 type Movement struct {
-	ID          string    `json:"id"`
-	Type        string    `json:"type"` // "income" o "expense"
-	CategoryID  string    `json:"category_id"`
-	Amount      float64   `json:"amount"`
-	Description *string   `json:"description"`
-	Date        time.Time `json:"date"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID           string    `json:"id"`
+	Type         string    `json:"type"` // "income" o "expense"
+	CategoryID   string    `json:"category_id"`
+	CategoryName string    `json:"category_name"`
+	Amount       float64   `json:"amount"`
+	Description  *string   `json:"description"`
+	Date         time.Time `json:"date"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // Balance representa el balance de un período
@@ -42,9 +43,10 @@ type GetBalanceQuery struct {
 
 // CategoryExpense representa el gasto total por categoría
 type CategoryExpense struct {
-	CategoryID string  `json:"category_id"`
-	Total      float64 `json:"total"`
-	Count      int     `json:"count"`
+	CategoryID   string  `json:"category_id"`
+	CategoryName string  `json:"category_name"`
+	Total        float64 `json:"total"`
+	Count        int     `json:"count"`
 }
 
 // GetExpensesByCategoryQuery consulta para obtener gastos agrupados por categoría
@@ -55,11 +57,15 @@ type GetExpensesByCategoryQuery struct {
 
 // MovementsQueryHandler maneja consultas de movimientos
 type MovementsQueryHandler struct {
-	eventStore eventstore.EventStore
+	eventStore        eventstore.EventStore
+	categoriesHandler *CategoriesQueryHandler
 }
 
 func NewMovementsQueryHandler(eventStore eventstore.EventStore) *MovementsQueryHandler {
-	return &MovementsQueryHandler{eventStore: eventStore}
+	return &MovementsQueryHandler{
+		eventStore:        eventStore,
+		categoriesHandler: NewCategoriesQueryHandler(eventStore),
+	}
 }
 
 func (h *MovementsQueryHandler) GetMovements(ctx context.Context, query GetMovementsQuery) ([]Movement, error) {
@@ -72,6 +78,28 @@ func (h *MovementsQueryHandler) GetMovements(ctx context.Context, query GetMovem
 	if movements == nil {
 		return []Movement{}, nil
 	}
+
+	// Obtener categorías para mapear nombres
+	categories, err := h.categoriesHandler.GetCategories(ctx, GetCategoriesQuery{})
+	if err != nil {
+		return []Movement{}, err
+	}
+
+	// Crear un mapa de ID a nombre de categoría
+	categoryNames := make(map[string]string)
+	for _, category := range categories {
+		categoryNames[category.ID] = category.Name
+	}
+
+	// Agregar nombres de categorías a los movimientos
+	for i := range movements {
+		if name, exists := categoryNames[movements[i].CategoryID]; exists {
+			movements[i].CategoryName = name
+		} else {
+			movements[i].CategoryName = "Sin categoría"
+		}
+	}
+
 	return movements, nil
 }
 
@@ -116,8 +144,11 @@ func (h *MovementsQueryHandler) GetExpensesByCategory(ctx context.Context, query
 	for _, movement := range movements {
 		if movement.Type == "expense" {
 			categoryID := movement.CategoryID
+			categoryName := movement.CategoryName
+
 			if categoryID == "" {
 				categoryID = "Sin categoría"
+				categoryName = "Sin categoría"
 			}
 
 			if existing, exists := categoryTotals[categoryID]; exists {
@@ -125,9 +156,10 @@ func (h *MovementsQueryHandler) GetExpensesByCategory(ctx context.Context, query
 				existing.Count++
 			} else {
 				categoryTotals[categoryID] = &CategoryExpense{
-					CategoryID: categoryID,
-					Total:      movement.Amount,
-					Count:      1,
+					CategoryID:   categoryID,
+					CategoryName: categoryName,
+					Total:        movement.Amount,
+					Count:        1,
 				}
 			}
 		}

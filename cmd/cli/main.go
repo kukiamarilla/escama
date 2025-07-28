@@ -113,7 +113,7 @@ var expenseCmd = &cobra.Command{
 }
 
 var createExpenseCmd = &cobra.Command{
-	Use:   "create [monto] [descripcion] [--category categoria-id]",
+	Use:   "create [monto] [descripcion] [--category nombre-categoria]",
 	Short: "Registrar un nuevo gasto",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -135,7 +135,12 @@ var createExpenseCmd = &cobra.Command{
 		var categoryID string
 
 		if categoryFlag != "" {
-			categoryID = categoryFlag
+			// Intentar buscar por nombre primero
+			if foundID, err := findCategoryByName(categoryFlag); err == nil {
+				categoryID = foundID
+			} else {
+				log.Fatalf("Error: %v", err)
+			}
 		} else {
 			selectedCategory, err := selectCategory()
 			if err != nil {
@@ -180,7 +185,7 @@ var incomeCmd = &cobra.Command{
 }
 
 var createIncomeCmd = &cobra.Command{
-	Use:   "create [monto] [descripcion] [--category categoria-id]",
+	Use:   "create [monto] [descripcion] [--category nombre-categoria]",
 	Short: "Registrar un nuevo ingreso",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -202,7 +207,12 @@ var createIncomeCmd = &cobra.Command{
 		var categoryID string
 
 		if categoryFlag != "" {
-			categoryID = categoryFlag
+			// Intentar buscar por nombre primero
+			if foundID, err := findCategoryByName(categoryFlag); err == nil {
+				categoryID = foundID
+			} else {
+				log.Fatalf("Error: %v", err)
+			}
 		} else {
 			selectedCategory, err := selectCategory()
 			if err != nil {
@@ -316,6 +326,31 @@ var movementsCmd = &cobra.Command{
 	},
 }
 
+// findCategoryByName busca una categoría por su nombre y devuelve su ID
+func findCategoryByName(categoryName string) (string, error) {
+	ctx := context.Background()
+	categories, err := categoriesQueryHandler.GetCategories(ctx, queries.GetCategoriesQuery{})
+	if err != nil {
+		return "", fmt.Errorf("error al obtener categorías: %w", err)
+	}
+
+	// Buscar por coincidencia exacta (sin importar mayúsculas/minúsculas)
+	for _, category := range categories {
+		if strings.EqualFold(category.Name, categoryName) {
+			return category.ID, nil
+		}
+	}
+
+	// Si no hay coincidencia exacta, mostrar categorías disponibles
+	fmt.Printf("❌ Categoría '%s' no encontrada.\n", categoryName)
+	fmt.Println("\n📋 Categorías disponibles:")
+	for _, category := range categories {
+		fmt.Printf("  • %s\n", category.Name)
+	}
+
+	return "", fmt.Errorf("categoría '%s' no encontrada", categoryName)
+}
+
 // selectCategory muestra un selector interactivo de categorías existentes
 func selectCategory() (string, error) {
 	ctx := context.Background()
@@ -332,7 +367,7 @@ func selectCategory() (string, error) {
 
 	fmt.Println("\n📋 Categorías disponibles:")
 	for i, category := range categories {
-		fmt.Printf("  %d. %s (%s)\n", i+1, category.Name, category.ID)
+		fmt.Printf("  %d. %s\n", i+1, category.Name)
 	}
 
 	fmt.Print("\n🎯 Selecciona una categoría (número): ")
@@ -394,8 +429,8 @@ func main() {
 	// Agregar flags de fecha a los comandos
 	createExpenseCmd.Flags().StringP("date", "t", "", "Fecha del gasto (formato: YYYY-MM-DD). Si no se especifica, usa la fecha actual")
 	createIncomeCmd.Flags().StringP("date", "t", "", "Fecha del ingreso (formato: YYYY-MM-DD). Si no se especifica, usa la fecha actual")
-	createExpenseCmd.Flags().StringP("category", "c", "", "ID de la categoría para el gasto (si no se especifica, se pedirá interactivamente)")
-	createIncomeCmd.Flags().StringP("category", "c", "", "ID de la categoría para el ingreso (si no se especifica, se pedirá interactivamente)")
+	createExpenseCmd.Flags().StringP("category", "c", "", "Nombre de la categoría para el gasto (si no se especifica, se pedirá interactivamente)")
+	createIncomeCmd.Flags().StringP("category", "c", "", "Nombre de la categoría para el ingreso (si no se especifica, se pedirá interactivamente)")
 
 	// Agregar subcomandos
 	categoryCmd.AddCommand(createCategoryCmd)
